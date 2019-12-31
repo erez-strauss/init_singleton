@@ -13,12 +13,19 @@ public:
     static constexpr auto n() { return V; }
 };
 
-void test1() { auto &ref1{es::init::singleton<Data<0>>::instance()}; (void)&ref1; }
+void test1()
+{
+    auto &ref1{es::init::singleton<Data<0>>::instance()};
+    (void)&ref1;
+}
 void test2()
 {
-     auto &ref1{es::init::singleton<Data<0>>::instance()}; (void)&ref1; 
-     auto &ref2{es::init::singleton<Data<2>>::instance()}; (void)&ref2; 
-     auto &ref3{es::init::singleton<Data<3>>::instance()}; (void)&ref3; 
+    auto &ref1{es::init::singleton<Data<0>>::instance()};
+    (void)&ref1;
+    auto &ref2{es::init::singleton<Data<2>>::instance()};
+    (void)&ref2;
+    auto &ref3{es::init::singleton<Data<3>>::instance()};
+    (void)&ref3;
 }
 
 int main()

@@ -60,7 +60,7 @@ TEST(Singleton, one_instance)
     EXPECT_TRUE(1 == es::init::singletons_counter::get());
 }
 
-#if 0 
+#if 0
 
 TEST(MPMC_Queue_FunctionalityTest, FillEmpty)
 {

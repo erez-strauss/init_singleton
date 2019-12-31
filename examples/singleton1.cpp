@@ -10,23 +10,22 @@ auto &ref1{es::init::singleton<int>::instance()};
 class SingleData
 {
 public:
-    SingleData() { // volatile ::std::ios_base::Init z{} ;
-         std::cout << "SingleData::ctor: " << __PRETTY_FUNCTION__ << std::endl;
+    SingleData()
+    {  // volatile ::std::ios_base::Init z{} ;
+        std::cout << "SingleData::ctor: " << __PRETTY_FUNCTION__ << std::endl;
     }
-    ~SingleData() {
-         std::cout << "SingleData::dtor: " << __PRETTY_FUNCTION__ << std::endl; }
+    ~SingleData() { std::cout << "SingleData::dtor: " << __PRETTY_FUNCTION__ << std::endl; }
     int _x{0};
 };
 
 class SingleDataX
 {
 public:
-    SingleDataX() {
-       std::cout << "SingleDataX::ctor: " << __PRETTY_FUNCTION__ << std::endl; }
+    SingleDataX() { std::cout << "SingleDataX::ctor: " << __PRETTY_FUNCTION__ << std::endl; }
     ~SingleDataX()
     {
-        std::cout << "SingleDataX::dtor: " << __PRETTY_FUNCTION__ << " " <<
-                (void *)&es::init::singleton<SingleData>::instance() << std::endl;
+        std::cout << "SingleDataX::dtor: " << __PRETTY_FUNCTION__ << " "
+                  << (void *)&es::init::singleton<SingleData>::instance() << std::endl;
     }
 };
 

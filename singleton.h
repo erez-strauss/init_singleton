@@ -1,37 +1,28 @@
 //
-// The search for a good Singleton
+// The efficient Singleton with proper initialization and destruction order
 //
 // 1. Efficient, with no condition on every access
 // 2. Multi dependency on other Singleton(s)
 // 3. Multi thread safe
 // 4. Proper initialization order with multiple compile units
 // 5. Early initialization, lazy initialization
-// 6. Detects circular dependency - exception
+// 6. Detects circular dependency - generates exception
 // 7. Proper destruction order
 // 8. None intrusive, requires only default constructor, supports native types.
 //
-// Using std::atomic<>, std::unique_ptr<>, std:mutex, std::guard<>
-//
+// See README.md for details.
 // Discussion Proper Initialization / Destruction order:
 // Simple Singleton can initialize properly when accessing one by one the singletons that require / depend on others.
 // As each one of them is being initialized on the first instance() call.
 // In order to solve their destructors order, their respective destructors need to be pushed into an atomic stack, and
-// counter of active singletons should be increased. the SpecialDeleter of each one of them, just reduces the counter of
-// live Singletons, and call the deleter in the stack when the counter gets to Zero. The outcome of the above - lazy
-// initialization, according to calls to singleton<>::instance() - and solving the initialization order. and destruction
-// happened in reversed order.
+// counter of active singletons should be increased. The SpecialDeleter of each one of the uniq_ptr<> of them,
+// just reduces the counter of live singletons, and calls the deleter in the stack when the counter gets to Zero.
 //
 // reference to a singleton will be valid in the block scope.
 // *** handle multiple calls to firstTimeGetInstance():
 //    -- one after the other() , as the unique pointer objects are "reinitialized" by the compiler.
 //         --> should return pointer to the same object.
 //    -- one call during the firstTimeActive() - if same-thread - circular dependency
-// *** multiple initialization of statics, in case of inline static... once for each compile unit.
-// To Do:
-// done 3. reporting - of all singleton_meta_data_nodes, counting how many are in use.
-// 4. google tests
-// 5. readme file , examples, ...
-// 6. github out
 //
 // MIT License
 //
@@ -185,8 +176,8 @@ struct static_obj_stack
 
 using stack = static_obj_stack<singletons_meta_data>;
 static inline std::atomic<bool> clean_up_phase{false};
-static inline int app_argc{0};
-static inline char** app_argv{nullptr};
+static inline int               app_argc{0};
+static inline char**            app_argv{nullptr};
 
 inline void emptyStack()
 {
@@ -237,10 +228,8 @@ struct early_args_initializer
     [[using gnu: used, constructor]] static void early_args_init(int argc, char** argv)
     {
         std::ios_base::Init z;
-        if (es::init::app_argc != argc)
-            es::init::app_argc = argc;
-        if (es::init::app_argv != argv)
-            es::init::app_argv = argv;
+        if (es::init::app_argc != argc) es::init::app_argc = argc;
+        if (es::init::app_argv != argv) es::init::app_argv = argv;
         T::instance();
     }
 };
@@ -328,46 +317,6 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
 
         return *_instance;
     }
-#if 0
-    template<typename ... ARGS>
-    static T& create(ARGS ... args)
-    {
-        volatile InitT init_object{};  // make sure, one can use the std::cout std::cerr streams from Singletons code
-
-        if (clean_up_phase)
-            std::cerr << "Warning: initializing at clean up phase - " << __PRETTY_FUNCTION__ << std::endl;
-
-        if (!_instance)
-        {
-            if (singleton_meta_data_node._flags & 0x1)
-            {
-                throw std::logic_error(std::string{"Error: circular dependency "} + __PRETTY_FUNCTION__);
-            }
-            std::lock_guard<std::mutex> guard(_mutex);
-            if (!_instance)
-            {
-                singleton_meta_data_node._flags = 0x1;
-                _instance                       = std::unique_ptr<T, SpecialDeleter>{new T(std::forward<ARGS...>(args...)), SpecialDeleter{}};
-                ++singletons_counter::global_counter;
-
-                if (!singleton_meta_data_node._p)
-                {
-                    singleton_meta_data_node._func      = activeDelete;
-                    singleton_meta_data_node._p         = (void*)&*_instance;
-                    singleton_meta_data_node._func_name = __PRETTY_FUNCTION__;
-                    stack::push(&singleton_meta_data_node);
-                }
-            }
-	    else
-	    { // ERROR, exception ?
-	    }
-        }
-        _getInstance = optGetInstance;
-        singleton_meta_data_node._flags &= ~0x1U;
-
-	return *_instance;
-    }
-#endif//00
 
     static T& optGetInstance() { return *_instance; }
 
@@ -379,7 +328,7 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
     static_assert(sizeof(_instance) == 8, "instace size should be 8 bytes");
 
 public:
-    [[ using gnu : hot ]] static T& instance()
+    [[using gnu: hot]] static T& instance()
     {
         auto f = _getInstance.load();
         return f();

@@ -8,7 +8,7 @@
 
 #include <iostream>
 
-//es::init::initializer<DataA> zzz;
+// es::init::initializer<DataA> zzz;
 
 void test3()
 {

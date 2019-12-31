@@ -6,7 +6,7 @@ VPATH:= src:tests:examples:.
 GTEST_INCLUDEDIR := $(shell if [ -d /usr/include/gtest ]; then echo /usr/include ; fi )
 GTEST_LIBDIR := $(shell if [ -f /usr/lib64/libgtest.so ]; then echo /usr/lib64 ; fi )
 
-TARGETS:= $(BDIR)/singleton1 $(BDIR)/singleton2 $(BDIR)/singleton3 $(BDIR)/singleton4bad $(BDIR)/singleton5 $(BDIR)/gtest_app_singleton1
+TARGETS:= $(BDIR)/singleton1 $(BDIR)/singleton2 $(BDIR)/singleton3 $(BDIR)/singleton4bad $(BDIR)/singleton5 $(BDIR)/singleton6 $(BDIR)/singleton7 $(BDIR)/singleton8 $(BDIR)/gtest_app_singleton1
 
 ifneq ($(GTEST_INCLUDEDIR),)
 	TARGETS += $(BDIR)/gtest_singleton1
@@ -44,6 +44,11 @@ $(BDIR)/.f:
 	@touch $@
 
 .PRECIOUS: %/.f
+
+reformat:
+	@perl -i -pe 's/	/    /g' $$(find -name '*.h' -o -name '*.cpp')
+	@for f in $$(find -name '*.h' -o -name '*.cpp') ; do echo $$f ; clang-format -style=file -i $$f ; done
+	@perl -i -pe 's/\s\s*$$/\n/g' $$(find -name '*.h' -o -name '*.cpp')
 
 clean:
 	@ rm -f *~ *.o *.bc *.ii *.s $(TARGETS)

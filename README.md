@@ -1,10 +1,88 @@
 # init_singleton
 Proper Initialization of singletons and resolve all initialization order issues
 
+## Usage examples
+
+```c++
+#include <singleton.h>
+int main()
+{
+    es::init::singleton<int>::instance() = 4; // a singleton of a type int, initialized before main() starts, destroyed after main() exits.
+    return 0;
+}
+```
+singleton6.cpp
+
+```c++
+#include <singleton.h>
+class DataA { public: DataA(){std::cout << "DataA()\n";} ~DataA() {std::cout << "~DataA()\n";}};
+class DataB { public: DataB(){std::cout << "DataB()\n";} ~DataB() {std::cout << "~DataB()\n";}};
+int main()
+{
+    std::cout << "main() start\n";
+ // a singleton of a type DataA, initialized before main() starts, destroyed after main() exits.
+    es::init::singleton<DataA>::instance();
+ // a singleton of a type DataB, initialized on first access to it, destroyed after main() exits.
+    es::init::singleton<DataB, es::init::lazy_initializer>::instance();
+    std::cout << "main() end\n";
+    return 0;
+}
+
+$ ./singleton7
+DataA()
+main() start
+DataB()
+main() end
+~DataB()
+~DataA()
+```
+singleton7.cpp
+
+The above example shows the early initialized singleton of type DataA, that is initialized before main()
+and the lazy initialized singleton of type DataB.
+
+One problem with early initialized objects how to access the command line arguments before the main() starts.
+to solve this the early_args_initializer template type, adds a method init(int,char**) with attribute constructor
+which is called before main, but with the proper arguments.
+The app_singletons.h creates two singletons *es::init::args* for the
+arguments from command line and *es::init::env* for the environment variables.
+
+The following example shows an early initialized singleton, which access the command line argument and the environment variables 
+```c++
+#include <app_singletons.h>
+class DataA { public: DataA(){std::cout << "DataA()\n";
+   es::init::args.for_each(
+        [](int index, auto& arg) { std::cout << "DataA: arg[" << index << "]: '" << arg << "'" << std::endl; });
+   es::init::env.for_each(
+        [](int index, auto& earg) { std::cout << "DataA: env[" << index << "]: '" << earg << "'" << std::endl; });
+} ~DataA() {std::cout << "~DataA()\n";}};
+int main()
+{
+    std::cout << "main() start\n";
+    es::init::singleton<DataA>::instance(); // a singleton of a type DataA, initialized before main() starts, destroyed after main() exits.
+    std::cout << "main() end\n";
+    return 0;
+}
+
+$ ./singleton8 a b c
+DataA()
+DataA: arg[0]: './singleton8'
+DataA: arg[1]: 'a'
+DataA: arg[2]: 'b'
+DataA: arg[3]: 'c'
+DataA: env[0]: 'SHELL=/bin/bash'
+.....
+DataA: env[63]: '_=./singleton8'
+main() start
+main() end
+~DataA()
+```
+singleton8.cpp
+
 
 ## The search for a good Singleton
 
-1. Efficient,  with no condition on every access, no guard variable
+1. Efficient, with no condition on every access, no guard variable
 2. Multi dependency, on other singleton(s)
 3. Multi thread safe
 4. Proper initialization order with multiple compile units
@@ -17,17 +95,15 @@ Proper Initialization of singletons and resolve all initialization order issues
 TODO:
  - benchmark, vs Meyers singleton, assembly, and performance.
  - improve CMakeList.txt & Makefile
- - complete readme.md
- - complete the gtests, and a test script
- - upload a wiki page
+ - complete this README.md
+ - more google tests and test scripts
+ - a wiki page
  - port to windows, as this version was test on Linux only, both g++ and clang++
-
-Using std::atomic<>, std::unique_ptr<>, std:mutex, std::guard<>
 
 Notes:
 We use early initialization, by default,
- - in order to guarentee that the c++ iostream are available, the code instantiates ::std::ios_base::Init object, which initializes the cout/cerr streams.
- - the early_args_initializer provides access to command line arguments to ealry initilized object before entring main()
+ - in order to guarantee that the c++ iostream are available, the code instantiates ::std::ios_base::Init object, which initializes the cout/cerr streams.
+ - the early_args_initializer provides access to command line arguments to early initialized object before entering main()
  
 The early initialization takes place before the main starts.
 
@@ -55,7 +131,8 @@ The problems with the above:
  4. The first call by the user is the one that will create the object, sometime we want it to be created even before main() starts.
 
 To optimize the accessor, I'll switch the pointer to the accessing functions, at initialization, to a function that already knows that it was created.
-the idea is to 
+the idea is to hold atomic<> pointer to a function which retrieves the singleton reference.
+This pointer is initialized at program load to point to initializer function, that changes it to point to an optimized function that knows that it was already initialized.
 
 
 
