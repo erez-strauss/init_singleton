@@ -12,26 +12,22 @@ Proper Initialization of singletons and resolve all initialization order issues
 6. Detects circular dependency tree
 7. Proper destruction order
 8. None intrusive, requires only default constructor, supports native types.
-* named
+9. Early init / Lazy init - resolved the command line arguments and environment veriables for early initialized objects.
 
 TODO:
  - benchmark, vs Meyers singleton, assembly, and performance.
- - CMakeList.txt & Makefile
+ - improve CMakeList.txt & Makefile
  - complete readme.md
  - complete the gtests, and a test script
- - upload to erez-strauss/singleton/singleton.h
- - upload also wiki page
+ - upload a wiki page
+ - port to windows, as this version was test on Linux only, both g++ and clang++
 
-
- define a used variable, with init_priority(101), with value returned by the firstrime - 
- remove the construcctor attribute from the firsttime function.
- 
 Using std::atomic<>, std::unique_ptr<>, std:mutex, std::guard<>
 
 Notes:
 We use early initialization, by default,
- in after the c++ library was initialized,
- in order to guarentee that the c++ iostream are available, the code instantiates ::std::ios_base::Init object, which initializes the cout/cerr streams.
+ - in order to guarentee that the c++ iostream are available, the code instantiates ::std::ios_base::Init object, which initializes the cout/cerr streams.
+ - the early_args_initializer provides access to command line arguments to ealry initilized object before entring main()
  
 The early initialization takes place before the main starts.
 
