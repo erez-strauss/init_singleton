@@ -26,7 +26,7 @@
 //
 // MIT License
 //
-// Copyright (c) 2019 Erez Strauss, erez@erezstrauss.com
+// Copyright (c) 2019,2020 Erez Strauss, erez@erezstrauss.com
 //  http://github.com/erez-strauss/init_singleton/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -213,7 +213,7 @@ inline void report_singletons_stack()
 }
 
 template<typename T>
-struct early_initializer
+struct early_initializer_no_args
 {
     [[using gnu: used, constructor]] static void early_init()
     {
@@ -223,9 +223,9 @@ struct early_initializer
 };
 
 template<typename T>
-struct early_args_initializer
+struct early_initializer
 {
-    [[using gnu: used, constructor]] static void early_args_init(int argc, char** argv)
+    [[using gnu: used, constructor]] static void early_init(int argc, char** argv)
     {
         std::ios_base::Init z;
         if (es::init::app_argc != argc) es::init::app_argc = argc;
@@ -239,7 +239,7 @@ struct lazy_initializer
 {  // empty - do nothing.
 };
 
-template<typename T, template<typename TT> class EI = early_args_initializer, typename M = void,
+template<typename T, template<typename TT> class EI = early_initializer, typename M = void,
          typename InitT = ::std::ios_base::Init>
 class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
 {

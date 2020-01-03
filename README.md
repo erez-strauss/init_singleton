@@ -1,6 +1,18 @@
 # init_singleton
 Proper Initialization of singletons and resolve all initialization order issues
 
+## Implementation
+In order to remove any guard access from the critical path, an atomic<> function pointer is used to get reference to the
+instance of the given singleton.
+This pointer is initialized at load time to point to an initialization function, that upon successful creation of the
+singleton object, will change the value of the atomic pointer to refer to a simple method that knows that the
+pointer to the instance is valid.
+
+From that point on, there is no need to chech whether the object exists.
+
+In order to call their destructors, there are unique_ptr pointing to the singleton, with specialized deleter, which reduces a global counter of number of active singletons (of any type)
+once there are no more active singleton, the code will destroy them one by one, in reverse order of creation.
+
 ## Usage examples
 
 ```c++

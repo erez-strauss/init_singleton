@@ -32,6 +32,6 @@ public:
     }
 };
 
-[[using gnu: used]] static inline auto& env{singleton<app_env, early_args_initializer>::instance()};
+[[using gnu: used]] static inline auto& env{singleton<app_env, early_initializer>::instance()};
 
 }  // namespace es::init

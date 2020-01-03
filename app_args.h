@@ -22,6 +22,6 @@ public:
     }
 };
 
-[[using gnu: used]] static inline auto& args{singleton<app_args, early_args_initializer>::instance()};
+[[using gnu: used]] static inline auto& args{singleton<app_args, early_initializer>::instance()};
 
 }  // namespace es::init

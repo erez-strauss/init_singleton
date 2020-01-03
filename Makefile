@@ -19,6 +19,9 @@ all: $(TARGETS) | $(BDIR)/.f
 run_tests: all $(TARGETS) | $(BDIR)/.f
 	@for p in $(TARGETS); do echo ===== $$p ===== ; ./$$p ; done
 
+run_valgrind: all $(TARGETS) | $(BDIR)/.f
+	@for p in $(TARGETS); do echo ===== $$p ===== ; valgrind -v --leak-check=full --track-origins=yes --log-file=./$$p.vg.out.txt ./$$p ; done
+
 $(BDIR)/singleton3: $(BDIR)/singleton3.o $(BDIR)/singleton3a.o $(BDIR)/singleton3b.o $(BDIR)/singleton3c.o
 
 $(BDIR)/gtest_app_singleton1: LDFLAGS += -lgtest_main -lgtest 
@@ -38,6 +41,8 @@ $(BDIR)/%.o: $(BDIR)/.f
 $(BDIR)/%.o: %.cpp | $(BDIR)/.f
 	$(CXX) $(CXXFLAGS) -I. -Isrc -DGTEST_HAS_PTHREAD=1 -pthread -c -o $@ $^
 
+cmake:
+	mkdir cbuild; cd cbuild ; cmake .. ; $(MAKE) -j
 
 $(BDIR)/.f:
 	@mkdir -p $(dir $@)
@@ -53,4 +58,4 @@ reformat:
 clean:
 	@ rm -f *~ *.o *.bc *.ii *.s $(TARGETS)
 	@ rm -f */*~ */*.o */*.bc */*.ii */*.s $(TARGETS)
-	@ rm -rf	build
+	@ rm -rf build cbuild
