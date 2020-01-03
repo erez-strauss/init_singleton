@@ -1,17 +1,17 @@
 # init_singleton
-Proper Initialization of singletons and resolve all initialization order issues
+Proper Initialization of singletons and resolve initialization order issues
 
 ## Implementation
-In order to remove any guard access from the critical path, an atomic<> function pointer is used to get reference to the
+In order to remove any guard access from the critical path, an atomic<> function pointer is used to get the reference to the
 instance of the given singleton.
-This pointer is initialized at load time to point to an initialization function, that upon successful creation of the
+This pointer is initialized, at program load time, to point to an initialization function, that upon successful creation of the
 singleton object, will change the value of the atomic pointer to refer to a simple method that knows that the
 pointer to the instance is valid.
 
-From that point on, there is no need to chech whether the object exists.
+From that point on, there is no need to check whether the object exists.
 
-In order to call their destructors, there are unique_ptr pointing to the singleton, with specialized deleter, which reduces a global counter of number of active singletons (of any type)
-once there are no more active singleton, the code will destroy them one by one, in reverse order of creation.
+In order to call their destructors, there are unique_ptr<> pointing to the singleton, with a specialized deleter, which reduces the global counter of active singletons (of any type)
+once there are no more active singletons, the code will destroy them one by one, in reverse order of creation.
 
 ## Usage examples
 
@@ -54,7 +54,7 @@ The above example shows the early initialized singleton of type DataA, that is i
 and the lazy initialized singleton of type DataB.
 
 One problem with early initialized objects how to access the command line arguments before the main() starts.
-to solve this the early_args_initializer template type, adds a method init(int,char**) with attribute constructor
+to solve this the early_initializer template type, adds a method init(int,char\*\*) with attribute constructor
 which is called before main, but with the proper arguments.
 The app_singletons.h creates two singletons *es::init::args* for the
 arguments from command line and *es::init::env* for the environment variables.
@@ -115,7 +115,7 @@ TODO:
 Notes:
 We use early initialization, by default,
  - in order to guarantee that the c++ iostream are available, the code instantiates ::std::ios_base::Init object, which initializes the cout/cerr streams.
- - the early_args_initializer provides access to command line arguments to early initialized object before entering main()
+ - the early_initializer provides access to command line arguments to early initialized object before entering main()
  
 The early initialization takes place before the main starts.
 
@@ -145,14 +145,5 @@ The problems with the above:
 To optimize the accessor, I'll switch the pointer to the accessing functions, at initialization, to a function that already knows that it was created.
 the idea is to hold atomic<> pointer to a function which retrieves the singleton reference.
 This pointer is initialized at program load to point to initializer function, that changes it to point to an optimized function that knows that it was already initialized.
-
-
-
-
-
-
-
-
-
 
 
