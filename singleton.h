@@ -328,11 +328,7 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
     static_assert(sizeof(_instance) == 8, "instace size should be 8 bytes");
 
 public:
-    [[using gnu: hot]] static T& instance()
-    {
-        auto f = _getInstance.load();
-        return f();
-    }
+    [[using gnu: hot]] static T& instance() { return _getInstance.load()(); }
 };
 
 }  // namespace es::init
