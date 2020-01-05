@@ -25,7 +25,7 @@ int main()
 ```
 singleton6.cpp
 
-```c++
+```cpp
 #include <singleton.h>
 class DataA { public: DataA(){std::cout << "DataA()\n";} ~DataA() {std::cout << "~DataA()\n";}};
 class DataB { public: DataB(){std::cout << "DataB()\n";} ~DataB() {std::cout << "~DataB()\n";}};
@@ -60,7 +60,7 @@ The app_singletons.h creates two singletons *es::init::args* for the
 arguments from command line and *es::init::env* for the environment variables.
 
 The following example shows an early initialized singleton, which access the command line argument and the environment variables 
-```c++
+```cpp
 #include <app_singletons.h>
 class DataA { public: DataA(){std::cout << "DataA()\n";
    es::init::args.for_each(
@@ -124,17 +124,19 @@ There are many reasons not to use global variables and singletons, and there are
 I'll focus on the good reasons, and work towards a good singleton that address many of the good reasons to avoid it.
 
 
-## Singleton use cases:
+## Singleton use cases
 
-1. Initialization order of application components holding references or using other components at init time, using singlton<> of different types.
+* Initialization order of application components holding references or using other components at init time, using singlton<> of different types.
    The following example (examples/singleton10.cpp) shows few classes (I use struct to simpify the example text)
-   ComponentE - has no dependencies - used as singleton inside ComponentC constructor
-   ComponentD - has no dependencies - used as singleton as initialization value to ComponenD reference in componentC
-   ComponentC - depends on D and E
-   ComponentB - depend on C, as it access the C singleton
-   ComponentA - depends on B, and indirectly on all the others
-   Engine - depends on ComponentA
-   All the above component can be in a single cpp file or each in own cpp files, and their initialization order
+   
+   - ComponentE - has no dependencies - used as singleton inside ComponentC constructor
+   - ComponentD - has no dependencies - used as singleton as initialization value to ComponenD reference in componentC
+   - ComponentC - depends on D and E
+   - ComponentB - depend on C, as it access the C singleton
+   - ComponentA - depends on B, and indirectly on all the others
+   - Engine - depends on ComponentA
+   
+   All the above component can be in a single cpp file or each in its own cpp files, and their initialization order
    is well defined, and does not depent on linkage order.
 
 ```   
@@ -158,8 +160,9 @@ class Engine { public: Engine() : _a(es::init::singleton<ComponentA>::instance()
 int main() { Engine e{}; return 0; }
 ```
 
-2. Deep nested function that internally needs access to a singleton information for decision
-   This example9.cpp also shows access to command-line arguments from the SetupInfo object.
+* Deep nested function that internally needs access to a singleton information for decision
+
+   This example9.cpp shows access to command-line arguments from the SetupInfo object.
    It eliminate the need to pass references to singleton<> objects from containing Objects down to their internal objects (ProcessorA - internal to B, while B internal to C)
    As this implementation is faster than others it reduces the overhead of accessing singletons objects.
 
@@ -211,7 +214,7 @@ int main()
 
     c.action();
 }
-
+```
 
 ## Comparison to other Singleton implementation
 
