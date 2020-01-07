@@ -299,7 +299,7 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
             std::lock_guard<std::mutex> guard(_mutex);
             if (!_instance)
             {
-                singleton_meta_data_node._flags = 0x1;
+                singleton_meta_data_node._flags |= 0x1U;
                 _instance                       = std::unique_ptr<T, SpecialDeleter>{new T{}, SpecialDeleter{}};
                 ++singletons_counter::global_counter;
 
@@ -310,10 +310,10 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
                     singleton_meta_data_node._func_name = __PRETTY_FUNCTION__;
                     stack::push(&singleton_meta_data_node);
                 }
+                singleton_meta_data_node._flags &= ~0x1U;
             }
         }
         _getInstance = optGetInstance;
-        singleton_meta_data_node._flags &= ~0x1U;
 
         return *_instance;
     }
