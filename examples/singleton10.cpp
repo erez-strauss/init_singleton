@@ -6,8 +6,8 @@
 template<typename T>
 struct CDReporter
 {
-    CDReporter() { std::cout << "inside: " << __PRETTY_FUNCTION__ << " this: " << (void*)this << std::endl; }
-    ~CDReporter() { std::cout << "inside: " << __PRETTY_FUNCTION__ << " this: " << (void*)this << std::endl; }
+    CDReporter() { std::cout << "constructor: " << __PRETTY_FUNCTION__ << " this: " << (void*)this << std::endl; }
+    ~CDReporter() { std::cout << "destructor: " << __PRETTY_FUNCTION__ << " this: " << (void*)this << std::endl; }
 };
 
 struct ComponentE : public CDReporter<ComponentE>
