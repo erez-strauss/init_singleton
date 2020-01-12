@@ -62,7 +62,14 @@ namespace es::init {
 
 __extension__ using uint128_t = unsigned __int128;
 
-constexpr const bool verbose_singletons{false};
+constexpr const bool verbose_singletons
+{
+#if defined(INIT_SINGLETON_VERBOSE)
+    true
+#else
+    false
+#endif
+};
 
 static constexpr bool USE_BUILTIN_16B
 {
@@ -105,19 +112,46 @@ struct sequenced_ptr
 };
 static_assert(sizeof(sequenced_ptr<int>) == 16, "Wrong size for sequenced_ptr");
 
+class alignas(64) tc_spin_lock
+{
+public:
+    void lock()
+    {
+        auto& spinlock{*reinterpret_cast<std::atomic<bool>*>(&_spinlock)};
+        bool  b = false;
+        while (spinlock.compare_exchange_strong(b, true))
+        {
+            b = false;
+        }
+    }
+    void unlock()
+    {
+        auto& spinlock{*reinterpret_cast<std::atomic<bool>*>(&_spinlock)};
+        spinlock = false;
+    }
+
+    bool _spinlock;
+    static_assert(sizeof(_spinlock) == sizeof(std::atomic<bool>), "missmatching sizes");
+};
+static_assert(std::is_trivially_constructible_v<es::init::tc_spin_lock>,
+              "es::init::spin_lock is not trivially constructed");
+
 struct singleton_base
 {
 };
 
 struct singletons_meta_data
 {
-    singletons_meta_data* _next{nullptr};
-    void (*_func)(singletons_meta_data*){nullptr};
-    void*       _p{nullptr};
-    const char* _func_name{nullptr};
-    uint32_t    _useCount{0};
-    uint32_t    _flags{0};
+    singletons_meta_data* _next;
+    void (*_func)(singletons_meta_data*);
+    void*        _p;
+    const char*  _func_name;
+    uint32_t     _useCount;
+    uint32_t     _flags;
+    tc_spin_lock _lock;
 };
+static_assert(std::is_trivially_constructible_v<singletons_meta_data>,
+              "singletons_meta_data is not trivially constructed");
 
 class singletons_counter
 {
@@ -134,7 +168,6 @@ template<typename T>
 struct static_obj_stack
 {
     inline static sequenced_ptr<T> top{0UL};
-    inline static std::mutex       stack_mutex{};
 
     static void push(T* p)
     {
@@ -167,11 +200,11 @@ struct static_obj_stack
 
     static uint64_t size()
     {
-        std::lock_guard<std::mutex> guard(stack_mutex);
-        uint64_t                    n{0};
+        uint64_t n{0};
         for (T* p = top._u._s._p; p != nullptr; p = p->_next) ++n;
         return n;
     }
+
 };
 
 using stack = static_obj_stack<singletons_meta_data>;
@@ -181,8 +214,6 @@ static inline char**            app_argv{nullptr};
 
 inline void emptyStack()
 {
-    std::lock_guard<std::mutex> guard(stack::stack_mutex);
-
     clean_up_phase = true;
 
     uint64_t n{0};
@@ -203,8 +234,7 @@ inline void emptyStack()
 
 inline void report_singletons_stack()
 {
-    std::lock_guard<std::mutex> guard(stack::stack_mutex);
-    uint64_t                    n{0};
+    uint64_t n{0};
     for (singletons_meta_data* p = stack::top._u._s._p; p != nullptr; p = p->_next)
     {
         std::cout << "singletons_stack_meta_data_node[" << ++n << "]: " << (void*)p << " func_name: " << p->_func_name
@@ -256,14 +286,17 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
             activated = true;
             if (p)
             {
-                std::lock_guard<std::mutex> guard(_mutex);
-                if (_getInstance == optGetInstance) _getInstance = firstTimeGetInstance;
-                singleton_meta_data_node._p = (void*)p;
-                --singletons_counter::global_counter;
-                if constexpr (es::init::verbose_singletons)
                 {
-                    std::cout << "SpecialDeleter - done " << singletons_counter::global_counter.load() << " "
-                              << __PRETTY_FUNCTION__ << std::endl;
+                    std::lock_guard<tc_spin_lock> guard(singleton_meta_data_node._lock);
+
+                    if (_getInstance == optGetInstance) _getInstance = firstTimeGetInstance;
+                    singleton_meta_data_node._p = (void*)p;
+                    --singletons_counter::global_counter;
+                    if constexpr (es::init::verbose_singletons)
+                    {
+                        std::cout << "SpecialDeleter - done " << singletons_counter::global_counter.load() << " "
+                                  << __PRETTY_FUNCTION__ << std::endl;
+                    }
                 }
                 if (!singletons_counter::global_counter) emptyStack();
             }
@@ -272,6 +305,8 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
 
     static void activeDelete(singletons_meta_data* np)
     {
+        std::lock_guard<tc_spin_lock> guard(np->_lock);
+
         static uint64_t active_delete_count{0};
         ++active_delete_count;
         if constexpr (es::init::verbose_singletons)
@@ -296,11 +331,11 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
             {
                 throw std::logic_error(std::string{"Error: circular dependency "} + __PRETTY_FUNCTION__);
             }
-            std::lock_guard<std::mutex> guard(_mutex);
+            std::lock_guard<tc_spin_lock> guard(singleton_meta_data_node._lock);
             if (!_instance)
             {
                 singleton_meta_data_node._flags |= 0x1U;
-                _instance                       = std::unique_ptr<T, SpecialDeleter>{new T{}, SpecialDeleter{}};
+                _instance = std::unique_ptr<T, SpecialDeleter>{new T{}, SpecialDeleter{}};
                 ++singletons_counter::global_counter;
 
                 if (!singleton_meta_data_node._p)
@@ -322,8 +357,7 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
 
     inline static std::atomic<T& (*)()>              _getInstance{firstTimeGetInstance};
     inline static std::unique_ptr<T, SpecialDeleter> _instance{nullptr};
-    inline static std::mutex                         _mutex{};
-    inline static singletons_meta_data               singleton_meta_data_node{nullptr, nullptr, nullptr, nullptr, 0, 0};
+    inline static singletons_meta_data singleton_meta_data_node{nullptr, nullptr, nullptr, nullptr, 0, 0, {false}};
 
     static_assert(sizeof(_instance) == 8, "instace size should be 8 bytes");
 

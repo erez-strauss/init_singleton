@@ -1,4 +1,5 @@
 
+#CXXFLAGS:= -mcx16 -std=c++2a -I. -Iexamples -W -Wall -Wextra -Wshadow -Wpedantic -O3 -pthread -DINIT_SINGLETON_VERBOSE=1
 CXXFLAGS:= -mcx16 -std=c++2a -I. -Iexamples -W -Wall -Wextra -Wshadow -Wpedantic -O3 -pthread
 
 BDIR:=build
