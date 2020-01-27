@@ -314,7 +314,7 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
             std::cerr << "activeDelete - " << __PRETTY_FUNCTION__ << " " << (void*)np->_p << " " << active_delete_count
                       << std::endl;
         }
-        delete static_cast<T*>(np->_p);
+        static_cast<T*>(np->_p)->~T(); // call dtor, without releasing memery, which is statically allocated in the union.
         np->_p = nullptr;
     }
 
@@ -335,13 +335,13 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
             if (!_instance)
             {
                 singleton_meta_data_node._flags |= 0x1U;
-                _instance = std::unique_ptr<T, SpecialDeleter>{new T{}, SpecialDeleter{}};
+                _instance = std::unique_ptr<T, SpecialDeleter>{new (&_u._instance) T{}, SpecialDeleter{}};
                 ++singletons_counter::global_counter;
 
                 if (!singleton_meta_data_node._p)
                 {
                     singleton_meta_data_node._func      = activeDelete;
-                    singleton_meta_data_node._p         = (void*)&*_instance;
+                    singleton_meta_data_node._p         = (void*)&_u._instance;
                     singleton_meta_data_node._func_name = __PRETTY_FUNCTION__;
                     stack::push(&singleton_meta_data_node);
                 }
@@ -350,12 +350,13 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
         }
         _getInstance = optGetInstance;
 
-        return *_instance;
+        return _u._instance;
     }
 
-    static T& optGetInstance() { return *_instance; }
+    static T& optGetInstance() { return _u._instance; }
 
     inline static std::atomic<T& (*)()>              _getInstance{firstTimeGetInstance};
+    inline static union U { U(){} ~U(){} char _x[sizeof (T)]; T _instance; } _u;
     inline static std::unique_ptr<T, SpecialDeleter> _instance{nullptr};
     inline static singletons_meta_data singleton_meta_data_node{nullptr, nullptr, nullptr, nullptr, 0, 0, {false}};
 
