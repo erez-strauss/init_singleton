@@ -21,7 +21,7 @@ run_tests: all $(TARGETS) | $(BDIR)/.f
 	@for p in $(TARGETS); do echo ===== $$p ===== ; ./$$p ; done
 
 run_valgrind: all $(TARGETS) | $(BDIR)/.f
-	@for p in $(TARGETS); do echo ===== $$p ===== ; valgrind -v --leak-check=full --track-origins=yes --log-file=./$$p.vg.out.txt ./$$p ; done
+	@for p in $(TARGETS); do echo ===== $$p ===== ; valgrind -v --leak-check=full --show-leak-kinds=all --track-origins=yes --log-file=./$$p.vg.out.txt ./$$p ; done
 
 $(BDIR)/singleton3: $(BDIR)/singleton3.o $(BDIR)/singleton3a.o $(BDIR)/singleton3b.o $(BDIR)/singleton3c.o
 
