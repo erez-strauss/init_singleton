@@ -146,12 +146,19 @@ struct singletons_meta_data
     void (*_func)(singletons_meta_data*);
     void*        _p;
     const char*  _func_name;
-    uint32_t     _useCount;
+    uint32_t     _init_count;
     uint32_t     _flags;
     tc_spin_lock _lock;
 };
 static_assert(std::is_trivially_constructible_v<singletons_meta_data>,
               "singletons_meta_data is not trivially constructed");
+
+inline std::ostream& operator<<(std::ostream& os, const singletons_meta_data& md)
+{
+    os << "singleton meta data: " << (void*)&md << " p: " << (void*)md._p << " init count: " << md._init_count
+       << " flags: " << md._flags << " func name: " << (md._func_name ? md._func_name : "''");
+    return os;
+}
 
 class singletons_counter
 {
@@ -204,7 +211,6 @@ struct static_obj_stack
         for (T* p = top._u._s._p; p != nullptr; p = p->_next) ++n;
         return n;
     }
-
 };
 
 using stack = static_obj_stack<singletons_meta_data>;
@@ -221,8 +227,8 @@ inline void emptyStack()
     {
         if constexpr (es::init::verbose_singletons)
         {
-            std::cout << "emptyStack[" << n++ << "]: node: " << (void*)p << " func_name: " << p->_func_name
-                      << std::endl;
+            std::cout << "emptyStack[" << n << "]: " << *p << std::endl;
+            ++n;
         }
         if (auto f = p->_func)
         {
@@ -237,8 +243,8 @@ inline void report_singletons_stack()
     uint64_t n{0};
     for (singletons_meta_data* p = stack::top._u._s._p; p != nullptr; p = p->_next)
     {
-        std::cout << "singletons_stack_meta_data_node[" << ++n << "]: " << (void*)p << " func_name: " << p->_func_name
-                  << std::endl;
+        std::cout << "singletons_stack_meta_data_node[" << n << "]: " << *p << std::endl;
+        ++n;
     }
 }
 
@@ -314,16 +320,25 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
             std::cerr << "activeDelete - " << __PRETTY_FUNCTION__ << " " << (void*)np->_p << " " << active_delete_count
                       << std::endl;
         }
-        static_cast<T*>(np->_p)->~T(); // call dtor, without releasing memery, which is statically allocated in the union.
+        // call dtor, without releasing memery, which is statically allocated in the union.
+        static_cast<T*>(np->_p)->~T();
         np->_p = nullptr;
     }
 
     static T& firstTimeGetInstance()
     {
-        volatile InitT init_object{};  // make sure, one can use the std::cout std::cerr streams from Singletons code
+        InitT init_object{};  // make sure, one can use the std::cout std::cerr streams from Singletons code
+
+        if constexpr (es::init::verbose_singletons)
+        {
+            std::cerr << "firstTimeGetInstance: initializing Singleton: " << __PRETTY_FUNCTION__ << " "
+                      << singleton_meta_data_node << std::endl;
+        }
 
         if (clean_up_phase)
+        {
             std::cerr << "Warning: initializing at clean up phase - " << __PRETTY_FUNCTION__ << std::endl;
+        }
 
         if (!_instance)
         {
@@ -343,6 +358,7 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
                     singleton_meta_data_node._func      = activeDelete;
                     singleton_meta_data_node._p         = (void*)&_u._instance;
                     singleton_meta_data_node._func_name = __PRETTY_FUNCTION__;
+                    singleton_meta_data_node._init_count++;
                     stack::push(&singleton_meta_data_node);
                 }
                 singleton_meta_data_node._flags &= ~0x1U;
@@ -355,8 +371,14 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
 
     static T& optGetInstance() { return _u._instance; }
 
-    inline static std::atomic<T& (*)()>              _getInstance{firstTimeGetInstance};
-    inline static union U { U(){} ~U(){} char _x[sizeof (T)]; T _instance; } _u;
+    inline static std::atomic<T& (*)()> _getInstance{firstTimeGetInstance};
+    inline static union U
+    {
+        U() {}
+        ~U() {}
+        char _x[sizeof(T)];
+        T    _instance;
+    } _u;
     inline static std::unique_ptr<T, SpecialDeleter> _instance{nullptr};
     inline static singletons_meta_data singleton_meta_data_node{nullptr, nullptr, nullptr, nullptr, 0, 0, {false}};
 
