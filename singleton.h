@@ -19,10 +19,10 @@
 // just reduces the counter of live singletons, and calls the deleter in the stack when the counter gets to Zero.
 //
 // reference to a singleton will be valid in the block scope.
-// *** handle multiple calls to firstTimeGetInstance():
+// *** handle multiple calls to first_time_get_instance():
 //    -- one after the other() , as the unique pointer objects are "reinitialized" by the compiler.
 //         --> should return pointer to the same object.
-//    -- one call during the firstTimeActive() - if same-thread - circular dependency
+//    -- one call during the first_time_get_instance - if same-thread - circular dependency
 //
 // MIT License
 //
@@ -81,6 +81,38 @@ static constexpr bool USE_BUILTIN_16B
     false  // other compilers
 #endif
 };
+
+namespace details_static_instances_counting {
+
+inline std::atomic<long> global_static_instances_counter;  // do NOT initialize, default zero
+static_assert(std::is_trivially_constructible_v<std::atomic<long>>, "std::atomic should be trivially constructable");
+
+template<typename F>
+class InstancesCounterZeroActivated
+{
+public:
+    InstancesCounterZeroActivated() noexcept { ++global_static_instances_counter; }
+
+    InstancesCounterZeroActivated(const InstancesCounterZeroActivated&) = delete;
+    InstancesCounterZeroActivated(InstancesCounterZeroActivated&&)      = delete;
+    InstancesCounterZeroActivated& operator=(const InstancesCounterZeroActivated&) = delete;
+    InstancesCounterZeroActivated& operator=(InstancesCounterZeroActivated&&) = delete;
+
+    ~InstancesCounterZeroActivated() noexcept
+    {
+        if (--global_static_instances_counter == 0)
+        {
+            F{}();
+            return;
+        }
+        if (global_static_instances_counter < 0)
+        {
+            std::cerr << "Error: negative static counter:" << global_static_instances_counter << std::endl;
+        }
+    }
+    static long get_counter() noexcept { return global_static_instances_counter; }
+};
+}  // namespace details_static_instances_counting
 
 template<typename T>
 struct sequenced_ptr
@@ -143,7 +175,7 @@ struct singleton_base
 struct singletons_meta_data
 {
     singletons_meta_data* _next;
-    void (*_func)(singletons_meta_data*);
+    void (*_func)();
     void*        _p;
     const char*  _func_name;
     uint32_t     _init_count;
@@ -159,17 +191,6 @@ inline std::ostream& operator<<(std::ostream& os, const singletons_meta_data& md
        << " flags: " << md._flags << " func name: " << (md._func_name ? md._func_name : "''");
     return os;
 }
-
-class singletons_counter
-{
-    inline static std::atomic<int64_t> global_counter{0};
-
-public:
-    static auto get() { return global_counter.load(); };
-
-    template<typename T, template<typename TT> class EI, typename M, typename InitT>
-    friend class singleton;
-};
 
 template<typename T>
 struct static_obj_stack
@@ -192,8 +213,8 @@ struct static_obj_stack
     }
     static T* pop()
     {
-        sequenced_ptr<T> stack_top;
-        sequenced_ptr<T> new_top;
+        sequenced_ptr<T> stack_top{};
+        sequenced_ptr<T> new_top{};
         do
         {
             stack_top = top.load();
@@ -218,7 +239,7 @@ static inline std::atomic<bool> clean_up_phase{false};
 static inline int               app_argc{0};
 static inline char**            app_argv{nullptr};
 
-inline void emptyStack()
+inline void empty_stack()
 {
     clean_up_phase = true;
 
@@ -227,13 +248,13 @@ inline void emptyStack()
     {
         if constexpr (es::init::verbose_singletons)
         {
-            std::cout << "emptyStack[" << n << "]: " << *p << std::endl;
+            std::cout << "empty_stack[" << n << "]: " << *p << std::endl;
             ++n;
         }
         if (auto f = p->_func)
         {
             p->_func = nullptr;
-            f(p);
+            f();
         }
     }
 }
@@ -275,63 +296,50 @@ struct lazy_initializer
 {  // empty - do nothing.
 };
 
+struct ActionOnZero
+{
+    void operator()() const
+    {
+        static std::atomic<bool> activated{false};
+
+        if constexpr (verbose_singletons)
+            std::cout << "ActionOnZero(): calling empty_stack(): from: " << __PRETTY_FUNCTION__ << "\n";
+        if (activated.exchange(true))
+        {
+            std::cout << "ActionOnZero(): Already activated\n";
+            return;
+        }
+        empty_stack();
+    }
+};
+
 template<typename T, template<typename TT> class EI = early_initializer, typename M = void,
          typename InitT = ::std::ios_base::Init>
 class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
 {
-    struct SpecialDeleter
+    static void active_delete()
     {
-        void operator()(T* p) const
-        {
-            static bool activated{false};
-            if constexpr (verbose_singletons)
-            {
-                std::cout << "SpecialDeleter start " << singletons_counter::global_counter.load() << " "
-                          << __PRETTY_FUNCTION__ << " " << (void*)p << " " << (activated ? 'T' : 'F') << std::endl;
-            }
-            activated = true;
-            if (p)
-            {
-                {
-                    std::lock_guard<tc_spin_lock> guard(singleton_meta_data_node._lock);
-
-                    if (_getInstance == optGetInstance) _getInstance = firstTimeGetInstance;
-                    singleton_meta_data_node._p = (void*)p;
-                    --singletons_counter::global_counter;
-                    if constexpr (es::init::verbose_singletons)
-                    {
-                        std::cout << "SpecialDeleter - done " << singletons_counter::global_counter.load() << " "
-                                  << __PRETTY_FUNCTION__ << std::endl;
-                    }
-                }
-                if (!singletons_counter::global_counter) emptyStack();
-            }
-        }
-    };
-
-    static void activeDelete(singletons_meta_data* np)
-    {
-        std::lock_guard<tc_spin_lock> guard(np->_lock);
+        std::lock_guard<tc_spin_lock> guard(singleton_meta_data_node._lock);
 
         static uint64_t active_delete_count{0};
         ++active_delete_count;
         if constexpr (es::init::verbose_singletons)
         {
-            std::cerr << "activeDelete - " << __PRETTY_FUNCTION__ << " " << (void*)np->_p << " " << active_delete_count
-                      << std::endl;
+            std::cerr << "active_delete - " << __PRETTY_FUNCTION__ << " " << (void*)singleton_meta_data_node._p << " "
+                      << active_delete_count << std::endl;
         }
-        // call dtor, without releasing memery, which is statically allocated in the union.
-        static_cast<T*>(np->_p)->~T();
-        np->_p = nullptr;
+        // call dtor, without releasing memory, which is statically allocated in the union.
+        static_cast<T*>(singleton_meta_data_node._p)->~T();
+        singleton_meta_data_node._p = nullptr;
     }
 
-    static T& firstTimeGetInstance()
+    static T& first_time_get_instance()
     {
         InitT init_object{};  // make sure, one can use the std::cout std::cerr streams from Singletons code
 
         if constexpr (es::init::verbose_singletons)
         {
-            std::cerr << "firstTimeGetInstance: initializing Singleton: " << __PRETTY_FUNCTION__ << " "
+            std::cerr << "Info: firstTimeGetInstance: initializing Singleton: " << __PRETTY_FUNCTION__ << " "
                       << singleton_meta_data_node << std::endl;
         }
 
@@ -340,52 +348,64 @@ class singleton : public singleton_base, EI<singleton<T, EI, M, InitT>>
             std::cerr << "Warning: initializing at clean up phase - " << __PRETTY_FUNCTION__ << std::endl;
         }
 
-        if (!_instance)
+        if (!singleton_meta_data_node._p)
         {
-            if (singleton_meta_data_node._flags & 0x1)
+            if (singleton_meta_data_node._flags & 0x1U)
             {
                 throw std::logic_error(std::string{"Error: circular dependency "} + __PRETTY_FUNCTION__);
             }
             std::lock_guard<tc_spin_lock> guard(singleton_meta_data_node._lock);
-            if (!_instance)
-            {
-                singleton_meta_data_node._flags |= 0x1U;
-                _instance = std::unique_ptr<T, SpecialDeleter>{new (&_u._instance) T{}, SpecialDeleter{}};
-                ++singletons_counter::global_counter;
 
-                if (!singleton_meta_data_node._p)
+            if (!singleton_meta_data_node._p)
+            {
+                if (singleton_meta_data_node._init_count > 0)
                 {
-                    singleton_meta_data_node._func      = activeDelete;
-                    singleton_meta_data_node._p         = (void*)&_u._instance;
-                    singleton_meta_data_node._func_name = __PRETTY_FUNCTION__;
-                    singleton_meta_data_node._init_count++;
-                    stack::push(&singleton_meta_data_node);
+                    std::cerr
+                        << "Warning: 1 first_time_get_instance: initializing Singleton, more than once: init_count: "
+                        << singleton_meta_data_node._init_count << " - " << __PRETTY_FUNCTION__ << " "
+                        << singleton_meta_data_node << std::endl;
                 }
+
+                singleton_meta_data_node._flags |= 0x1U;
+                static details_static_instances_counting::InstancesCounterZeroActivated<ActionOnZero> iCounter{};
+                new (&_u._instance) T{};
+
+                if constexpr (es::init::verbose_singletons)
+                {
+                    if (singleton_meta_data_node._init_count > 0)
+                        std::cerr << "Warning: 2 first_time_get_instance: initializing Singleton, more than once: "
+                                     "init_count: "
+                                  << singleton_meta_data_node._init_count << " - " << __PRETTY_FUNCTION__ << " "
+                                  << singleton_meta_data_node << std::endl;
+                }
+
+                singleton_meta_data_node._func      = active_delete;
+                singleton_meta_data_node._p         = (void*)&_u._instance;
+                singleton_meta_data_node._func_name = __PRETTY_FUNCTION__;
+                singleton_meta_data_node._init_count++;
+                stack::push(&singleton_meta_data_node);
                 singleton_meta_data_node._flags &= ~0x1U;
             }
         }
-        _getInstance = optGetInstance;
+        _get_instance = optimized_get_instance;
 
         return _u._instance;
     }
 
-    static T& optGetInstance() { return _u._instance; }
+    [[using gnu: hot]] static T& optimized_get_instance() { return _u._instance; }
 
-    inline static std::atomic<T& (*)()> _getInstance{firstTimeGetInstance};
+    inline static std::atomic<T& (*)()> _get_instance{first_time_get_instance};
     inline static union U
     {
-        U() {}
+        U() {} // Do nothing constructor.
         ~U() {}
-        char _x[sizeof(T)];
+        char _x;
         T    _instance;
     } _u;
-    inline static std::unique_ptr<T, SpecialDeleter> _instance{nullptr};
     inline static singletons_meta_data singleton_meta_data_node{nullptr, nullptr, nullptr, nullptr, 0, 0, {false}};
 
-    static_assert(sizeof(_instance) == 8, "instace size should be 8 bytes");
-
 public:
-    [[using gnu: hot]] static T& instance() { return _getInstance.load()(); }
+    [[using gnu: hot]] static T& instance() { return _get_instance.load()(); }
 };
 
 }  // namespace es::init

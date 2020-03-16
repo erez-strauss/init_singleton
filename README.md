@@ -239,4 +239,10 @@ To optimize the accessor, I'll switch the pointer to the accessing functions, at
 the idea is to hold atomic<> pointer to a function which retrieves the singleton reference.
 This pointer is initialized at program load to point to initializer function, that changes it to point to an optimized function that knows that it was already initialized.
 
+## Next Steps:
 
+0. Compile/link time errer - if same singleton type defined, with early/lazy initialization. -- all references should match.
+1. Count number of initializations of a singleton, as we might re-initialize after de-init during destruction.
+2. Make initialization code portable to windows https://stackoverflow.com/questions/1113409/attribute-constructor-equivalent-in-vc
+3. Wiki
+4. More Examples

@@ -57,9 +57,24 @@ TEST(Singleton, one_instance)
     es::init::singleton<int>::instance();
     es::init::singleton<int>::instance();
 
-    EXPECT_TRUE(1 == es::init::singletons_counter::get());
+    EXPECT_TRUE(2 == es::init::details_static_instances_counting::global_static_instances_counter.load());
 }
 
+class Validator1
+{
+public:
+    Validator1() { _data = 1; }
+    bool is_valid() { return _data == 1; }
+
+private:
+    int _data{0};
+};
+
+TEST(Singleton, Initializer)
+{
+    auto& v{es::init::singleton<Validator1>::instance()};
+    EXPECT_TRUE(v.is_valid());
+}
 #if 0
 
 TEST(MPMC_Queue_FunctionalityTest, FillEmpty)
